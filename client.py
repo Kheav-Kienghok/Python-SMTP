@@ -3,7 +3,6 @@ import socket
 import threading
 import sys
 
-
 PORT = 5555
 HEADER = 1024
 SERVER = socket.gethostbyname(socket.gethostname())
@@ -29,13 +28,18 @@ def receive_messages(client_socket):
                 break
 
         except Exception:
-            print("Connection lost.")
             break
 
 
 
 # Connect to the server
 def start_client():
+    answer = input('Would you like to connect (yes/no)? ')
+    if answer.lower() != 'yes':
+        print("Exiting program.")
+        return
+    
+    
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((SERVER, PORT))
 
@@ -62,11 +66,9 @@ def start_client():
                 break
 
             client_socket.send(message.encode())
-
-        except Exception as e:
-            print(f"Error sending message: {e}")
-            client_socket.close()
-            break
+            
+        except KeyboardInterrupt:
+            print(f"\n{name} have been disconnected.")
 
 
 if __name__ == "__main__":
