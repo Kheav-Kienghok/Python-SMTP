@@ -11,33 +11,68 @@ load_dotenv()
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 PASSWORD = os.getenv("PASSWORD")
 
-# Store client information: (socket, name, email)
-clients = []
+
+PORT = 5555
+HEADER = 1024
+SERVER = socket.gethostbyname(socket.gethostname())
+ADDR = (SERVER, PORT)
+FORMAT = "utf-8"
+DISCONNECT_MESSAGE = "!DISCONNECT"
+
+
+# Store client information: key is the name, value is dict of (socket, email)
+clients = {}
 
 # Broadcast messages to all clients
-def broadcast(message, sender_socket):
-    for client_socket, _, _ in clients:
-        if client_socket != sender_socket:
+def broadcast(message, sender_name):
+    for client_name, client_info in clients.items():
+        if client_name != sender_name:
             try:
-                client_socket.send(message)
+                client_info["socket"].send(message)
             except Exception:
-                client_socket.close()
+                client_info["socket"].close()
+
+
+# Send a direct message to a specific client
+def direct_message(sender_name, recipient_name, message):
+    if recipient_name in clients:
+        try:
+            direct_msg = f"[DM from {sender_name}] {message}".encode()
+            clients[recipient_name]["socket"].send(direct_msg)
+            print(f"Direct message from {sender_name} to {recipient_name}: {message}")
+            
+            # Send an email notification to the recipient
+            notify_email(sender_name, clients[recipient_name]["email"], message, dm=True)
+            return True  # Message successfully sent
+        
+        except Exception as e:
+            print(f"Failed to send direct message: {e}")
+            return False
+            
+    print(f"Client {recipient_name} not found.")
+    return False  # Recipient not found
+
 
 # Notify clients via email when a message is sent
-def notify_email(sender_name, sender_email, message):
+def notify_email(sender_name, recipient_email, message, dm = False):
     smtp_server = 'smtp.gmail.com'
     smtp_port = 465   # Using the SSL port for SMTP
     smtp_user = SENDER_EMAIL
     smtp_password = PASSWORD
 
     # Send notification to all other clients except the sender
-    recipients = [email for _, _, email in clients if email != sender_email]
+    recipients = [client_info["email"] for client_name, client_info in clients.items() if client_info["email"] != recipient_email]
 
+
+    # If it's a direct message, we only notify the recipient
+    if dm:
+        recipients = [recipient_email]
+        
     if not recipients:
         return  # No one to notify
 
-    subject = f"New message from {sender_name}"
-    body = f"{sender_name} sent the following message:\n\n{message}"
+    subject = f"Direct message from {sender_name}" if dm else f"New message from {sender_name}"
+    body = f"{sender_name} sent you the following direct message:\n\n{message}" if dm else f"{sender_name} sent the following message:\n\n{message}"
 
     msg = MIMEMultipart()
     msg['From'] = smtp_user
@@ -56,16 +91,33 @@ def notify_email(sender_name, sender_email, message):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# Handle individual client connection
+    
 def handle_client(client_socket, client_name, client_email):
     while True:
         try:
-            message = client_socket.recv(1024)
+            message = client_socket.recv(HEADER)
             if not message:
                 break
-            broadcast(message, client_socket)
-            print(f"{client_name} says: {message.decode()}")
-            notify_email(client_name, client_email, message.decode())
+            message_decoded = message.decode()
+            
+            # Check if the message is a direct message
+            if message_decoded.startswith("/dm"):
+                # Expected format: /dm recipient_name message_content
+                parts = message_decoded.split(" ", 2)
+                if len(parts) < 3:
+                    client_socket.send("Invalid direct message format. Use: /dm [recipient_name] [message]\n".encode())
+                    continue
+                recipient_name = parts[1]
+                dm_message = parts[2]
+                
+                # Send direct message
+                if not direct_message(client_name, recipient_name, dm_message):
+                    client_socket.send(f"Failed to send message to {recipient_name}. They might be offline.\n".encode())
+            else:
+                # Broadcast the message to all other clients
+                broadcast(message, client_name)
+                print(f"{client_name} says: {message_decoded}")
+                notify_email(client_name, client_email, message_decoded)
         except Exception as e:
             print(f"Error with client {client_name}: {e}")
             break
@@ -75,7 +127,7 @@ def handle_client(client_socket, client_name, client_email):
 # Start the server and accept new clients
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('0.0.0.0', 5555))
+    server_socket.bind((SERVER, PORT))
     server_socket.listen(5)
     print("Server is listening...")
 
@@ -89,8 +141,8 @@ def start_server():
         client_socket.send("Enter your email: ".encode())
         client_email = client_socket.recv(1024).decode()
 
-        # Add the new client to the list
-        clients.append((client_socket, client_name, client_email))
+        # Add the new client to the dictionary
+        clients[client_name] = {"socket": client_socket, "email": client_email}
         print(f"Client {client_name} connected with email {client_email}")
 
         # Start a new thread to handle the client
