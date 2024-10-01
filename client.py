@@ -2,6 +2,8 @@ from colorama import Fore, Style, init
 import socket
 import threading
 import sys
+import os
+
 
 PORT = 5555
 HEADER = 1024
@@ -9,6 +11,9 @@ SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = "utf-8"
 DISCONNECT_MESSAGE = "!DISCONNECT"
+
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client_socket.connect((SERVER, PORT))
 
 
 # Receive messages from the server
@@ -21,12 +26,19 @@ def receive_messages(client_socket):
                 sys.stdout.write("\033[K")  # Clear the line
                 sys.stdout.write(f"\r{Fore.LIGHTWHITE_EX}{message}{Style.RESET_ALL}\n")  # Print received message
 
+
+                # Check for the disconnect message
+                if message == "Invalid email format. Disconnecting.":
+                    client_socket.close()
+                    os._exit(0)  
+                
+                
                 # Reprint the input prompt without causing duplicate "You:"
                 sys.stdout.write("You: ")
                 sys.stdout.flush()
             else:
                 break
-
+            
         except Exception:
             break
 
@@ -39,9 +51,6 @@ def start_client():
         print("Exiting program.")
         return
     
-    
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((SERVER, PORT))
 
     # Receive and send client name and email
     name_prompt = client_socket.recv(HEADER).decode()
@@ -64,8 +73,9 @@ def start_client():
                 client_socket.close()
                 print("Disconnected from server.")
                 break
-
-            client_socket.send(message.encode())
+            
+            yellow_message = f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
+            client_socket.send(yellow_message.encode())
             
         except KeyboardInterrupt:
             print(f"\n{name} have been disconnected.")

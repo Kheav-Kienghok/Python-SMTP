@@ -48,7 +48,7 @@ def broadcast(message, sender_name=None, exclude_client=None):
 def direct_message(sender_name, recipient_name, message):
     if recipient_name in clients:
         try:
-            direct_msg = f"[DM from {sender_name}] {message}".encode(FORMAT)
+            direct_msg = f"{Fore.CYAN}[Private message from {sender_name}]: {message}{Style.RESET_ALL}".encode(FORMAT)
             clients[recipient_name]["socket"].send(direct_msg)
             print(f"Direct message from {sender_name} to {recipient_name}: {message}")
             notify_email(sender_name, clients[recipient_name]["email"], message, dm=True)
@@ -60,7 +60,7 @@ def direct_message(sender_name, recipient_name, message):
 # Email notification logic
 def notify_email(sender_name, recipient_email, message, dm=False):
     smtp_server = 'smtp.gmail.com'
-    smtp_port = 465
+    smtp_port = 465                 # Using the SSL port for SMTP
     smtp_user = SENDER_EMAIL
     smtp_password = PASSWORD
 
@@ -115,15 +115,16 @@ def handle_client(client_socket, client_name, client_email):
                 if not direct_message(client_name, recipient_name, dm_message):
                     client_socket.send(f"Failed to send message to {recipient_name}. They might be offline.".encode(FORMAT))
             else:
-                broadcast(f"{client_name}: {message_decoded}", client_name)
+                broadcast(f"{Fore.CYAN}{client_name}: {message_decoded}{Style.RESET_ALL}", client_name)
                 notify_email(client_name, client_email, message_decoded)
                 
-                print(f"{client_name}: {message_decoded}")
-                sys.stdout.write("Server: ")
+                print(f"{Fore.CYAN}{client_name}: {message_decoded}{Style.RESET_ALL}")
+                sys.stdout.write(f"{Fore.YELLOW}Server: {Style.RESET_ALL}")
                 sys.stdout.flush()
 
-        except Exception as e:
-            print(f"{client_name} disconnected unexpectedly: {e}")
+        except Exception:
+            print(f"{Fore.LIGHTRED_EX}{client_name} has left the chat.{Style.RESET_ALL}")
+            broadcast(f"{Fore.LIGHTRED_EX}{client_name} has left the chat.{Style.RESET_ALL}")
             break
 
     # Cleanup
@@ -133,17 +134,31 @@ def handle_client(client_socket, client_name, client_email):
             broadcast(f"{Fore.LIGHTRED_EX}{client_name} has left the chat.{Style.RESET_ALL}")
     client_socket.close()
 
+
+# Kick the client by closing their connection
+def kick_client(client_socket, reason=""):
+    try:
+        client_socket.send(f"{Fore.RED}You have been kicked. (Reason: {reason}){Style.RESET_ALL}".encode())
+        client_socket.close()
+    except Exception as e:
+        print(f"Failed to kick client: {e}")
+        
+
 def server_broadcast_input():
     """Handles server-side input to send messages to all connected clients."""
     while True:
-        sys.stdout.write("Server: ")
-        sys.stdout.flush()
+        print_server()
         msg = input("")
 
         if msg:
             formatted_msg = f"{Fore.YELLOW}[SERVER]: {msg}{Style.RESET_ALL}".encode(FORMAT)
             broadcast(formatted_msg)
             # print(f"[SERVER]: {msg}")
+
+
+def print_server():
+    sys.stdout.write(f"{Fore.YELLOW}Server: {Style.RESET_ALL}")
+    sys.stdout.flush()
 
 # Start the server
 def start_server():
@@ -158,7 +173,9 @@ def start_server():
 
     while True:
         client_socket, client_address = server_socket.accept()
-        print(f"New connection from {client_address}")
+        print(f"\rNew connection from {client_address}")
+        
+        print_server()
 
         client_socket.send("Enter your name: ".encode(FORMAT))
         client_name = client_socket.recv(HEADER).decode(FORMAT).strip()
@@ -168,10 +185,12 @@ def start_server():
 
         if is_valid_email(client_email):
             # Start a new thread only after valid name and email
-            thread = threading.Thread(target=handle_client, args=(client_socket, client_name, client_email))
+            thread = threading.Thread(target = handle_client, args = (client_socket, client_name, client_email))
             thread.start()
-            print(f"[Active Connections] {threading.active_count() - 1}")
-            print(f"{client_name} connected with email {client_email}")
+            print(f"\r[Active Connections] {threading.active_count() - 1}")
+            print(f"\r{client_name} connected with email {client_email}")
+            
+            print_server()
             
         else:
             client_socket.send("Invalid email format. Disconnecting.".encode(FORMAT))
@@ -181,3 +200,17 @@ def start_server():
 if __name__ == "__main__":
     print("[STARTING] Server is starting ...")
     start_server()
+
+
+
+            
+            #             # Ask for the client's name
+            # client_name = client_socket.recv(HEADER).decode().strip()
+
+            # client_socket.send(f"Thank you, {client_name}! Next, enter your email address for notifications:\n> ".encode())
+
+
+        #    if not is_valid_email(client_email):
+        #         client_socket.send("Invalid email format. You are being disconnected.\n".encode())
+        #         kick_client(client_socket, reason="Invalid email format.")
+        #         continue
