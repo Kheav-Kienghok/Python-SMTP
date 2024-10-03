@@ -2,12 +2,13 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 from colorama import Fore, Style, init
+import aiosmtplib
 import socket
 import threading
-import smtplib
 import os
 import re
 import sys
+import asyncio
 
 load_dotenv()
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")      # Replace it with your Email
@@ -51,15 +52,20 @@ def direct_message(sender_name, recipient_name, message):
             direct_msg = f"{Fore.CYAN}[Private message from {sender_name}]: {message}{Style.RESET_ALL}".encode(FORMAT)
             clients[recipient_name]["socket"].send(direct_msg)
             print(f"\rDirect message from {sender_name} to {recipient_name}: {message}")
-            notify_email(sender_name, clients[recipient_name]["email"], message, dm=True)
+            
+            # Get the current event loop and run the notify_email coroutine
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(notify_email(sender_name, clients[recipient_name]["email"], message, dm=True))
+
             print_server()
             return True
         except Exception as e:
             print(f"{Fore.RED}Failed to send direct message: {e}{Style.RESET_ALL}")
     return False
 
-# Email notification logic
-def notify_email(sender_name, recipient_email, message, dm=False):
+# Async email notification logic
+async def notify_email(sender_name, recipient_email, message, dm=False):
     smtp_server = 'smtp.gmail.com'
     smtp_port = 465                 # Using the SSL port for SMTP
     smtp_user = SENDER_EMAIL
@@ -80,10 +86,15 @@ def notify_email(sender_name, recipient_email, message, dm=False):
     msg.attach(MIMEText(body, 'plain'))
 
     try:
-        server = smtplib.SMTP_SSL(smtp_server, smtp_port)
-        server.login(smtp_user, smtp_password)
-        server.sendmail(smtp_user, recipients, msg.as_string())
-        server.quit()
+        # Create an SSL connection and send the email asynchronously
+        await aiosmtplib.send(
+            msg,
+            hostname = smtp_server,
+            port = smtp_port,
+            username = smtp_user,
+            password = smtp_password,
+            use_tls = True,
+        )
         
         for recipient in recipients: 
             print(f"{Fore.LIGHTGREEN_EX}Notification email sent to {recipient}{Style.RESET_ALL}")
@@ -122,7 +133,11 @@ def handle_client(client_socket, client_name, client_email):
                     client_socket.send(f"Failed to send message to {recipient_name}. They might be offline.".encode(FORMAT))
             else:
                 broadcast(f"{Fore.YELLOW}{client_name}: {message_decoded}{Style.RESET_ALL}", client_name)
-                notify_email(client_name, client_email, message_decoded)
+                
+                # Get the current event loop and run the notify_email coroutine
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(notify_email(client_name, client_email, message_decoded))
                 
                 print(f"\r{Fore.WHITE}{client_name}: {Fore.WHITE}{message_decoded}{Style.RESET_ALL}")
                 print_server()

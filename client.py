@@ -72,8 +72,8 @@ def start_client():
                 print("Disconnected from server.")
                 break
             
-            yellow_message = f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
-            client_socket.send(yellow_message.encode())
+            # yellow_message = f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
+            client_socket.send(message.encode())
             
         except KeyboardInterrupt:
             print(f"\n{name} have been disconnected.")
