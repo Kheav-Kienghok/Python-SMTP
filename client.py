@@ -21,20 +21,18 @@ def receive_messages(client_socket):
     """Receives messages from the server in a loop."""
     while True:
         try:
-            message = client_socket.recv(HEADER).decode()
+            message = client_socket.recv(HEADER).decode(FORMAT)
             if message:
                 sys.stdout.write("\033[K")  # Clear the line
-                sys.stdout.write(f"\r{Fore.LIGHTWHITE_EX}{message}{Style.RESET_ALL}\n")  # Print received message
+                sys.stdout.write(f"\r{Fore.YELLOW}{message}{Style.RESET_ALL}\n")  # Print received message
 
-
-                # Check for the disconnect message
-                if message == "Invalid email format. Disconnecting.":
+                # Check for the disconnect messages
+                if "Invalid email format. Disconnecting." in message or "have been kicked." in message:
                     client_socket.close()
-                    os._exit(0)  
-                
+                    os._exit(0)  # Exit the program
                 
                 # Reprint the input prompt without causing duplicate "You:"
-                sys.stdout.write("You: ")
+                sys.stdout.write("\rYou: ")
                 sys.stdout.flush()
             else:
                 break
@@ -54,11 +52,11 @@ def start_client():
 
     # Receive and send client name and email
     name_prompt = client_socket.recv(HEADER).decode()
-    name = input(name_prompt)
+    name = input(f"{Fore.YELLOW}{name_prompt}{Style.RESET_ALL}")
     client_socket.send(name.encode())
 
     email_prompt = client_socket.recv(HEADER).decode()
-    email = input(email_prompt)
+    email = input(f"{Fore.CYAN}{email_prompt}{Style.RESET_ALL}")
     client_socket.send(email.encode())
 
     # Start a thread to receive messages from the server

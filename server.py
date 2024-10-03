@@ -39,8 +39,8 @@ def broadcast(message, sender_name=None, exclude_client=None):
                 try:
                     formatted_message = f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
                     client_info["socket"].send(formatted_message.encode(FORMAT))
-                except Exception as e:
-                    print(f"Failed to send message to {client_name}: {e}")
+                except Exception:
+                    print(f"Failed to send message to {client_name}")
                     client_info["socket"].close()
                     del clients[client_name]
 
@@ -50,8 +50,9 @@ def direct_message(sender_name, recipient_name, message):
         try:
             direct_msg = f"{Fore.CYAN}[Private message from {sender_name}]: {message}{Style.RESET_ALL}".encode(FORMAT)
             clients[recipient_name]["socket"].send(direct_msg)
-            print(f"Direct message from {sender_name} to {recipient_name}: {message}")
+            print(f"\rDirect message from {sender_name} to {recipient_name}: {message}")
             notify_email(sender_name, clients[recipient_name]["email"], message, dm=True)
+            print_server()
             return True
         except Exception as e:
             print(f"{Fore.RED}Failed to send direct message: {e}{Style.RESET_ALL}")
@@ -83,7 +84,11 @@ def notify_email(sender_name, recipient_email, message, dm=False):
         server.login(smtp_user, smtp_password)
         server.sendmail(smtp_user, recipients, msg.as_string())
         server.quit()
-        print(f"Notification email sent to {recipients}")
+        
+        for recipient in recipients: 
+            print(f"{Fore.LIGHTGREEN_EX}Notification email sent to {recipient}{Style.RESET_ALL}")
+            # print_server()
+    
     except Exception as e:
         print(f"{Fore.RED}Failed to send email: {e}{Style.RESET_ALL}")
 
@@ -92,7 +97,7 @@ def handle_client(client_socket, client_name, client_email):
     with clients_lock:
         clients[client_name] = {"socket": client_socket, "email": client_email}
     
-    broadcast(f"{Fore.LIGHTGREEN_EX}{client_name} has joined the chat!{Style.RESET_ALL}", exclude_client=client_name)
+    broadcast(f"{Fore.LIGHTGREEN_EX}{client_name} has joined the chat!{Style.RESET_ALL}", exclude_client = client_name)
 
     while True:
         try:
@@ -105,7 +110,8 @@ def handle_client(client_socket, client_name, client_email):
                 break
 
             message_decoded = message.strip()
-            if message_decoded.startswith("/dm"):
+            if "/dm" in message:
+                
                 parts = message_decoded.split(" ", 2)
                 if len(parts) < 3:
                     client_socket.send("Invalid direct message format. Use: /dm [recipient_name] [message]".encode(FORMAT))
@@ -115,15 +121,14 @@ def handle_client(client_socket, client_name, client_email):
                 if not direct_message(client_name, recipient_name, dm_message):
                     client_socket.send(f"Failed to send message to {recipient_name}. They might be offline.".encode(FORMAT))
             else:
-                broadcast(f"{Fore.CYAN}{client_name}: {message_decoded}{Style.RESET_ALL}", client_name)
+                broadcast(f"{Fore.YELLOW}{client_name}: {message_decoded}{Style.RESET_ALL}", client_name)
                 notify_email(client_name, client_email, message_decoded)
                 
-                print(f"{Fore.CYAN}{client_name}: {message_decoded}{Style.RESET_ALL}")
-                sys.stdout.write(f"{Fore.YELLOW}Server: {Style.RESET_ALL}")
-                sys.stdout.flush()
+                print(f"\r{Fore.WHITE}{client_name}: {Fore.WHITE}{message_decoded}{Style.RESET_ALL}")
+                print_server()
 
         except Exception:
-            print(f"{Fore.LIGHTRED_EX}{client_name} has left the chat.{Style.RESET_ALL}")
+            print(f"\r{Fore.LIGHTRED_EX}{client_name} has left the chat.{Style.RESET_ALL}")
             broadcast(f"{Fore.LIGHTRED_EX}{client_name} has left the chat.{Style.RESET_ALL}")
             break
 
@@ -136,10 +141,13 @@ def handle_client(client_socket, client_name, client_email):
 
 
 # Kick the client by closing their connection
-def kick_client(client_socket, reason=""):
+def kick_client(client_socket, client_name, reason = ""):
     try:
-        client_socket.send(f"{Fore.RED}You have been kicked. (Reason: {reason}){Style.RESET_ALL}".encode())
+        client_socket.send(f"{Fore.RED}{client_name} have been kicked. (Reason: {reason}){Style.RESET_ALL}".encode(FORMAT))
         client_socket.close()
+        
+        print(f"\r{Fore.RED}{client_name} have been kicked. (Reason: {reason}){Style.RESET_ALL}")
+        print_server()
     except Exception as e:
         print(f"Failed to kick client: {e}")
         
@@ -151,9 +159,9 @@ def server_broadcast_input():
         msg = input("")
 
         if msg:
-            formatted_msg = f"{Fore.YELLOW}[SERVER]: {msg}{Style.RESET_ALL}".encode(FORMAT)
+            formatted_msg = f"[SERVER]: {msg}"
             broadcast(formatted_msg)
-            # print(f"[SERVER]: {msg}")
+            print(f"{Fore.YELLOW}[SERVER]: {msg}{Style.RESET_ALL}")
 
 
 def print_server():
@@ -177,10 +185,14 @@ def start_server():
         
         print_server()
 
-        client_socket.send("Enter your name: ".encode(FORMAT))
+        # Send a friendly greeting first
+        # Asking for name
+        client_socket.send("Welcome to the chat server!\nPlease provide your name to join the chat:\n>>> ".encode(FORMAT))
         client_name = client_socket.recv(HEADER).decode(FORMAT).strip()
 
-        client_socket.send("Enter your email: ".encode(FORMAT))
+        # Asking for Email
+        
+        client_socket.send(f"{Fore.CYAN}Thank you, {client_name}!{Style.RESET_ALL}{Fore.YELLOW} Next, enter your email address for notifications:\n>>> {Style.RESET_ALL}".encode(FORMAT))
         client_email = client_socket.recv(HEADER).decode(FORMAT).strip()
 
         if is_valid_email(client_email):
@@ -193,24 +205,10 @@ def start_server():
             print_server()
             
         else:
-            client_socket.send("Invalid email format. Disconnecting.".encode(FORMAT))
-            client_socket.close()
+            client_socket.send("Invalid email format. Disconnecting....\n".encode(FORMAT))
+            kick_client(client_socket, client_name, reason = "Invalid email format.")
 
 
 if __name__ == "__main__":
     print("[STARTING] Server is starting ...")
     start_server()
-
-
-
-            
-            #             # Ask for the client's name
-            # client_name = client_socket.recv(HEADER).decode().strip()
-
-            # client_socket.send(f"Thank you, {client_name}! Next, enter your email address for notifications:\n> ".encode())
-
-
-        #    if not is_valid_email(client_email):
-        #         client_socket.send("Invalid email format. You are being disconnected.\n".encode())
-        #         kick_client(client_socket, reason="Invalid email format.")
-        #         continue
