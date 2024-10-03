@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv()
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")      # Replace it with your Email
@@ -26,6 +27,9 @@ server_socket.bind(ADDR)
     
 clients = {}
 clients_lock = threading.Lock()
+
+# Create a thread pool for managing client connections
+executor = ThreadPoolExecutor(max_workers = 5)  # Adjust the max_workers as needed
 
 # Email validation function
 def is_valid_email(email):
@@ -53,11 +57,12 @@ def direct_message(sender_name, recipient_name, message):
             clients[recipient_name]["socket"].send(direct_msg)
             print(f"\rDirect message from {sender_name} to {recipient_name}: {message}")
             
-            # Get the current event loop and run the notify_email coroutine
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(notify_email(sender_name, clients[recipient_name]["email"], message, dm=True))
-
+            # Start email notification in a new thread
+            threading.Thread(
+                target=start_email_notifier_loop,
+                args=(notify_email(sender_name, clients[recipient_name]["email"], message, dm = True),)
+            ).start()
+            
             print_server()
             return True
         except Exception as e:
@@ -102,6 +107,15 @@ async def notify_email(sender_name, recipient_email, message, dm=False):
     
     except Exception as e:
         print(f"{Fore.RED}Failed to send email: {e}{Style.RESET_ALL}")
+        
+
+# Start the email notifier event loop in a separate thread
+def start_email_notifier_loop(funtions):
+    """Runs an event loop in a separate thread for email notifications."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(funtions)
+
 
 # Error handling in message receiving
 def handle_client(client_socket, client_name, client_email):
@@ -134,10 +148,11 @@ def handle_client(client_socket, client_name, client_email):
             else:
                 broadcast(f"{Fore.YELLOW}{client_name}: {message_decoded}{Style.RESET_ALL}", client_name)
                 
-                # Get the current event loop and run the notify_email coroutine
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(notify_email(client_name, client_email, message_decoded))
+                # Start email notification in a new thread
+                threading.Thread(
+                    target=start_email_notifier_loop,
+                    args=(notify_email(client_name, client_email, message_decoded),)
+                ).start()
                 
                 print(f"\r{Fore.WHITE}{client_name}: {Fore.WHITE}{message_decoded}{Style.RESET_ALL}")
                 print_server()
@@ -206,7 +221,6 @@ def start_server():
         client_name = client_socket.recv(HEADER).decode(FORMAT).strip()
 
         # Asking for Email
-        
         client_socket.send(f"{Fore.CYAN}Thank you, {client_name}!{Style.RESET_ALL}{Fore.YELLOW} Next, enter your email address for notifications:\n>>> {Style.RESET_ALL}".encode(FORMAT))
         client_email = client_socket.recv(HEADER).decode(FORMAT).strip()
 
