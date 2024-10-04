@@ -107,7 +107,11 @@ async def notify_email(sender_name, recipient_email, message, dm=False):
     
     except Exception as e:
         print(f"{Fore.RED}Failed to send email: {e}{Style.RESET_ALL}")
-        
+        # Notify the sender that the email failed
+        with clients_lock:
+            if sender_name in clients:
+                failure_msg = f"{Fore.RED}Failed to send email notification. Error: {e}{Style.RESET_ALL}"
+                clients[sender_name]["socket"].send(failure_msg.encode(FORMAT))
 
 # Start the email notifier event loop in a separate thread
 def start_email_notifier_loop(funtions):
@@ -150,8 +154,8 @@ def handle_client(client_socket, client_name, client_email):
                 
                 # Start email notification in a new thread
                 threading.Thread(
-                    target=start_email_notifier_loop,
-                    args=(notify_email(client_name, client_email, message_decoded),)
+                    target = start_email_notifier_loop,
+                    args = (notify_email(client_name, client_email, message_decoded),)
                 ).start()
                 
                 print(f"\r{Fore.WHITE}{client_name}: {Fore.WHITE}{message_decoded}{Style.RESET_ALL}")
