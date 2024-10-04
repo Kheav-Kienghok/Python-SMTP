@@ -23,8 +23,8 @@ This is a multi-client chat application built using Python's `socket` module for
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd <repository-directory>
+   git clone https://github.com/Kheav-Kienghok/Python-SMTP.git
+   cd Python-SMTP
     ```
 
 2. Install the required dependencies:
