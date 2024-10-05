@@ -39,11 +39,24 @@ def is_valid_email(email):
 
 def broadcast(message, sender_name=None, exclude_client=None):
     with clients_lock:
+        
+        # Notify the sender that their message has been broadcasted only if more than one client is connected
+        if sender_name and len(clients) > 1:
+            sender_confirmation_msg = f"{Fore.GREEN}✅ Your email has been successfully sent!{Style.RESET_ALL}"
+            clients[sender_name]["socket"].send(sender_confirmation_msg.encode(FORMAT))  # Confirmation message to sender
+            
+            # Notify all other clients about the email notification
+            for client_name, client_info in clients.items():
+                if client_name != sender_name:
+                    notification_msg = f"{Fore.GREEN}🔔 You have a notification email from {sender_name}.{Style.RESET_ALL}"
+                    client_info["socket"].send(notification_msg.encode(FORMAT))
+
         for client_name, client_info in list(clients.items()):
             if client_name != sender_name and client_name != exclude_client:
                 try:
                     formatted_message = f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
                     client_info["socket"].send(formatted_message.encode(FORMAT))
+                    
                 except Exception:
                     print(f"Failed to send message to {client_name}")
                     client_info["socket"].close()
@@ -53,10 +66,21 @@ def broadcast(message, sender_name=None, exclude_client=None):
 def direct_message(sender_name, recipient_name, message):
     if recipient_name in clients:
         try:
+            
+            # Notify recipient about the direct message
+            recipient_notification_msg = f"{Fore.GREEN}📩 You have received a private message from {sender_name}.{Style.RESET_ALL}"
+            clients[recipient_name]["socket"].send(recipient_notification_msg.encode(FORMAT))  # Notify recipient
+            
+            
             direct_msg = f"{Fore.CYAN}[Private message from {sender_name}]: {message}{Style.RESET_ALL}".encode(FORMAT)
             clients[recipient_name]["socket"].send(direct_msg)
             print(f"\rDirect message from {sender_name} to {recipient_name}: {message}")
             
+            # Notify the sender that the message was sent successfully
+            sender_success_msg = f"{Fore.GREEN}Private Email to {recipient_name} has been sent successfully.{Style.RESET_ALL}"
+            clients[sender_name]["socket"].send(sender_success_msg.encode(FORMAT))  # Confirmation message to sender
+
+ 
             # Start email notification in a new thread
             threading.Thread(
                 target=start_email_notifier_loop,
@@ -65,8 +89,10 @@ def direct_message(sender_name, recipient_name, message):
             
             print_server()
             return True
+    
         except Exception as e:
             print(f"{Fore.RED}Failed to send direct message: {e}{Style.RESET_ALL}")
+            
     return False
 
 # Async email notification logic
@@ -106,13 +132,17 @@ async def notify_email(sender_name, recipient_email, message, dm=False):
         print(f"\r{Fore.LIGHTGREEN_EX}Notification email sent to: {recipients_list}{Style.RESET_ALL}")
         print_server()
     
-    except Exception as e:
-        print(f"{Fore.RED}Failed to send email: {e}{Style.RESET_ALL}")
-        # Notify the sender that the email failed
-        with clients_lock:
-            if sender_name in clients:
-                failure_msg = f"{Fore.RED}Failed to send email notification. Error: {e}{Style.RESET_ALL}"
-                clients[sender_name]["socket"].send(failure_msg.encode(FORMAT))
+    except Exception:
+        print(f"{Fore.RED}Failed to send email{Style.RESET_ALL}")
+
+        cleanup_client(sender_name)
+
+def cleanup_client(client_name):
+    with clients_lock:
+        if client_name in clients:
+            del clients[client_name]
+            broadcast(f"{Fore.LIGHTRED_EX}{client_name} has left the chat.{Style.RESET_ALL}")
+
 
 # Start the email notifier event loop in a separate thread
 def start_email_notifier_loop(funtions):
