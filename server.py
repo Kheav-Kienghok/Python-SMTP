@@ -100,10 +100,11 @@ async def notify_email(sender_name, recipient_email, message, dm=False):
             password = smtp_password,
             use_tls = True,
         )
-        
-        for recipient in recipients: 
-            print(f"{Fore.LIGHTGREEN_EX}Notification email sent to {recipient}{Style.RESET_ALL}")
-            # print_server()
+            
+        # Combine recipient email notifications into a single print statement
+        recipients_list = ", ".join(recipients)
+        print(f"\r{Fore.LIGHTGREEN_EX}Notification email sent to: {recipients_list}{Style.RESET_ALL}")
+        print_server()
     
     except Exception as e:
         print(f"{Fore.RED}Failed to send email: {e}{Style.RESET_ALL}")
@@ -135,7 +136,8 @@ def handle_client(client_socket, client_name, client_email):
                 break
 
             if message == DISCONNECT_MESSAGE:
-                print(f"{Fore.RED}{client_name} has disconnected.{Style.RESET_ALL}")
+                print(f"\r{Fore.RED}{client_name} has been disconnected from the server!{Style.RESET_ALL}")
+                print_server()
                 break
 
             message_decoded = message.strip()
@@ -177,7 +179,7 @@ def handle_client(client_socket, client_name, client_email):
 # Kick the client by closing their connection
 def kick_client(client_socket, client_name, reason = ""):
     try:
-        client_socket.send(f"{Fore.RED}{client_name} have been kicked. (Reason: {reason}){Style.RESET_ALL}".encode(FORMAT))
+        client_socket.send(f"{Fore.RED}You have been kicked. (Reason: {reason}){Style.RESET_ALL}".encode(FORMAT))
         client_socket.close()
         
         print(f"\r{Fore.RED}{client_name} have been kicked. (Reason: {reason}){Style.RESET_ALL}")

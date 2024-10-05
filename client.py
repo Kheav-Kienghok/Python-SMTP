@@ -1,4 +1,5 @@
-from colorama import Fore, Style, init  
+from colorama import Fore, Style, init 
+from mark_function import masked_input 
 import socket
 import threading
 import sys
@@ -28,8 +29,7 @@ def receive_messages(client_socket):
 
                 # Check for the disconnect messages
                 if "Invalid email format. Disconnecting." in message or "have been kicked." in message:
-                    client_socket.close()
-                    os._exit(0)  # Exit the program
+                    shutdown()
                 
                 # Reprint the input prompt without causing duplicate "You:"
                 sys.stdout.write("\rYou: ")
@@ -40,6 +40,13 @@ def receive_messages(client_socket):
         except Exception:
             break
 
+
+# Function to handle graceful shutdown
+def shutdown():
+    client_socket.send(DISCONNECT_MESSAGE.encode())
+    client_socket.close()
+    print(f"{Fore.RED}Disconnected from server!{Style.RESET_ALL}")
+    os._exit(0)
 
 
 # Connect to the server
@@ -56,7 +63,7 @@ def start_client():
     client_socket.send(name.encode())
 
     email_prompt = client_socket.recv(HEADER).decode()
-    email = input(f"{Fore.CYAN}{email_prompt}{Style.RESET_ALL}")
+    email = masked_input(f"{Fore.CYAN}{email_prompt}{Style.RESET_ALL}")  # Use custom masked input for email
     client_socket.send(email.encode())
 
     # Start a thread to receive messages from the server
@@ -67,16 +74,16 @@ def start_client():
     while True:
         try:
             message = input("You: ")
+            
             if message.lower() == "q":
-                client_socket.close()
-                print("Disconnected from server.")
-                break
+                shutdown()  # Use shutdown function for graceful exit
             
             # yellow_message = f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
             client_socket.send(message.encode())
             
         except KeyboardInterrupt:
             print(f"\n{name} have been disconnected.")
+            shutdown()  # Use shutdown function for graceful exit
 
 
 if __name__ == "__main__":
